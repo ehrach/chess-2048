@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chess 2048</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="game-container">
+    
+    <!-- TOP BAR -->
+    <div class="top">
+      <div class="title">Chess 2048</div>
+      <div class="scores">
+        <div class="score-box">
+          <div class="score-label">White</div>
+          <div id="score-white" class="score-value">136</div>
+        </div>
+        <div class="score-box">
+          <div class="score-label">Black</div>
+          <div id="score-black" class="score-value">136</div>
+        </div>
+        <div class="score-box target-box">
+          <div class="score-label">Target</div>
+          <div id="target-tile" class="score-value">512</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CURRENT PLAYER + TIMER + RESTART -->
+    <div class="subheader">
+      <div>Current player: <span id="current-player">White</span></div>
+
+      <div class="subheader-right">
+        <div class="timer">
+          Time left: <span id="timer">05:00</span>
+        </div>
+        <button id="restart-btn" class="btn">Restart</button>
+      </div>
+    </div>
+
+    <!-- BOARD + WIN OVERLAY -->
+    <div class="board-wrapper">
+      <div id="board" class="board"></div>
+
+      <!-- OVERLAY -->
+      <div id="winner-overlay" class="winner-overlay">
+        <div class="winner-box">
+          <div id="winner-text" class="winner-text">WHITE WINS !!</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="message" class="message"></div>
+
+    <!-- SOUNDS -->
+    <audio id="sound-move" src="move.wav" preload="auto"></audio>
+    <audio id="sound-merge" src="merge.wav" preload="auto"></audio>
+
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
