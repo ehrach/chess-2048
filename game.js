@@ -20,6 +20,20 @@ let mergeSound = null;
 let timerSeconds = GAME_TIME_SECONDS;
 let timerInterval = null;
 
+// messages / overlay
+let lastMessage = "";
+let winnerText = "";
+
+// online play state
+const ONLINE_COLORS = { host: "white", guest: "black" };
+let net = {
+  mode: "offline", // offline | hosting | joining | online-host | online-guest
+  roomId: null,
+  peer: null,
+  conn: null
+};
+let myColor = null;
+
 // === VALUE → PIECE TYPE MAPPING ===
 // 2 -> pawn, 4 -> knight, 8 -> bishop, 16 -> rook, 32+ -> queen
 function getTypeForValue(value) {
@@ -32,17 +46,11 @@ function getTypeForValue(value) {
 
 // --- INIT ---
 window.addEventListener("load", () => {
-  initBoardState();
+  const joinRoom = getRoomFromUrl();
+  initBoardState({ startClock: !joinRoom });
   renderBoard();
-
-  const restartBtn = document.getElementById("restart-btn");
-  if (restartBtn) {
-    restartBtn.addEventListener("click", () => {
-      initBoardState();
-      renderBoard();
-      setMessage("");
-    });
-  }
+  setupRestartButton();
+  setupOnlineControls(joinRoom);
 
   moveSound = document.getElementById("sound-move");
   mergeSound = document.getElementById("sound-merge");
@@ -77,8 +85,16 @@ function stopTimer() {
 
 function startTimer() {
   stopTimer();
+
+  if (isGuest()) {
+    timerSeconds = GAME_TIME_SECONDS;
+    updateTimerDisplay();
+    return;
+  }
+
   timerSeconds = GAME_TIME_SECONDS;
   updateTimerDisplay();
+  sendTimerUpdate();
 
   timerInterval = setInterval(() => {
     if (gameOver) {
@@ -91,6 +107,7 @@ function startTimer() {
       if (timerSeconds === 0) {
         handleTimeUp();
       }
+      sendTimerUpdate();
     }
   }, 1000);
 }
@@ -114,10 +131,347 @@ function handleTimeUp() {
   showWinnerOverlay(text);
   gameOver = true;
   stopTimer();
+  syncState("time");
+}
+
+// === ONLINE HELPERS ===
+function getRoomFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const room = params.get("room");
+  return room && room.trim() ? room.trim() : null;
+}
+
+function generateRoomId() {
+  return `chess2048-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isOnline() {
+  return net.mode !== "offline";
+}
+
+function isHost() {
+  return net.mode === "hosting" || net.mode === "online-host";
+}
+
+function isGuest() {
+  return net.mode === "joining" || net.mode === "online-guest";
+}
+
+function isConnected() {
+  return net.mode === "online-host" || net.mode === "online-guest";
+}
+
+function shouldStartClock() {
+  return !isGuest();
+}
+
+function buildInviteLink(roomId) {
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}?room=${roomId}`;
+}
+
+function setOnlineStatus(text) {
+  const el = document.getElementById("online-status");
+  if (el) el.textContent = text;
+}
+
+function updateInviteLink(link) {
+  const input = document.getElementById("invite-url");
+  const copyBtn = document.getElementById("copy-link-btn");
+  if (input) input.value = link || "";
+  if (copyBtn) copyBtn.disabled = !link;
+}
+
+function getPeerOptions() {
+  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  if (!isLocal) return undefined;
+  return {
+    host: "localhost",
+    port: 9000,
+    path: "/peerjs",
+    secure: false
+  };
+}
+
+function setupOnlineControls(joinRoom) {
+  const hostBtn = document.getElementById("host-online-btn");
+  const copyBtn = document.getElementById("copy-link-btn");
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const url = document.getElementById("invite-url");
+      if (!url || !url.value) return;
+      navigator.clipboard?.writeText(url.value).catch(() => {});
+      setMessage("Invite link copied.");
+    });
+  }
+
+  if (hostBtn) {
+    hostBtn.addEventListener("click", () => {
+      if (isOnline()) return;
+      startHosting();
+    });
+  }
+
+  if (joinRoom) {
+    net.mode = "joining";
+    myColor = ONLINE_COLORS.guest;
+    setOnlineStatus(`Joining room ${joinRoom}...`);
+    if (hostBtn) hostBtn.disabled = true;
+    connectAsGuest(joinRoom);
+  }
+}
+
+function setupRestartButton() {
+  const restartBtn = document.getElementById("restart-btn");
+  if (!restartBtn) return;
+
+  restartBtn.addEventListener("click", () => {
+    if (isGuest()) {
+      if (net.conn && net.conn.open) {
+        sendToPeer({ type: "restart" });
+        setMessage("Requested restart from host.");
+      } else {
+        setMessage("Connect to a host before restarting.");
+      }
+      return;
+    }
+
+    initBoardState({ startClock: shouldStartClock() });
+    renderBoard();
+    setMessage("");
+    syncState("restart");
+  });
+}
+
+function startHosting() {
+  if (typeof Peer === "undefined") {
+    setMessage("PeerJS failed to load. Online play unavailable.");
+    return;
+  }
+
+  net.roomId = generateRoomId();
+  net.mode = "hosting";
+  myColor = ONLINE_COLORS.host;
+
+  const hostBtn = document.getElementById("host-online-btn");
+  if (hostBtn) hostBtn.disabled = true;
+
+  const inviteLink = buildInviteLink(net.roomId);
+  updateInviteLink(inviteLink);
+  setOnlineStatus("Waiting for guest... (you are White)");
+  setMessage("Hosting online game. Share the invite link.");
+
+  net.peer = new Peer(net.roomId, getPeerOptions());
+
+  net.peer.on("open", () => {
+    setOnlineStatus("Hosting online match. Waiting for guest...");
+  });
+
+  net.peer.on("connection", connection => {
+    net.conn = connection;
+    setupConnectionHandlers(connection);
+    net.mode = "online-host";
+    setOnlineStatus("Guest connected! You are White.");
+    syncState("peer-connected");
+  });
+
+  net.peer.on("error", err => {
+    setMessage(`PeerJS error: ${err.type || err.message}`);
+  });
+
+  initBoardState({ startClock: shouldStartClock() });
+  renderBoard();
+}
+
+function connectAsGuest(roomId) {
+  if (typeof Peer === "undefined") {
+    setMessage("PeerJS failed to load. Online play unavailable.");
+    return;
+  }
+
+  myColor = ONLINE_COLORS.guest;
+  net.roomId = roomId;
+  net.peer = new Peer(null, getPeerOptions());
+
+  net.peer.on("open", () => {
+    setOnlineStatus(`Connecting to room ${roomId}...`);
+    net.conn = net.peer.connect(roomId);
+    setupConnectionHandlers(net.conn);
+  });
+
+  net.peer.on("error", err => {
+    setMessage(`PeerJS error: ${err.type || err.message}`);
+  });
+}
+
+function setupConnectionHandlers(connection) {
+  if (!connection) return;
+
+  connection.on("open", () => {
+    if (isHost()) {
+      net.mode = "online-host";
+      setOnlineStatus("Guest connected! You are White.");
+      syncState("connection-open");
+    } else {
+      net.mode = "online-guest";
+      setOnlineStatus("Connected. You are Black.");
+      setMessage("Connected. Waiting for host state...");
+    }
+  });
+
+  connection.on("data", handleIncomingData);
+
+  connection.on("close", () => {
+    setOnlineStatus("Disconnected. Reload to reconnect.");
+    setMessage("Connection closed.");
+    net.mode = "offline";
+    myColor = null;
+    net.conn = null;
+  });
+}
+
+function sendToPeer(payload) {
+  if (!net.conn || !net.conn.open) return;
+  try {
+    net.conn.send(payload);
+  } catch (e) {
+    // ignore send failures
+  }
+}
+
+function sendTimerUpdate() {
+  if (!isHost() || !isConnected()) return;
+  sendToPeer({ type: "timer", payload: { timerSeconds } });
+}
+
+function syncState(reason) {
+  if (!isHost() || !isConnected()) return;
+  const payload = {
+    board,
+    currentPlayer,
+    timerSeconds,
+    gameOver,
+    message: lastMessage,
+    winnerText,
+    overlayVisible: !!winnerText || gameOver,
+    lastAction
+  };
+  sendToPeer({ type: "sync", payload, reason });
+}
+
+function handleIncomingData(data) {
+  if (!data || !data.type) return;
+
+  if (data.type === "sync" && isGuest()) {
+    applyRemoteState(data.payload || {});
+    return;
+  }
+
+  if (data.type === "timer" && isGuest()) {
+    if (data.payload && typeof data.payload.timerSeconds === "number") {
+      timerSeconds = data.payload.timerSeconds;
+      updateTimerDisplay();
+    }
+    return;
+  }
+
+  if (data.type === "status") {
+    setMessage(data.text || "");
+    return;
+  }
+
+  if (data.type === "move" && isHost()) {
+    handleRemoteMove(data);
+    return;
+  }
+
+  if (data.type === "restart") {
+    if (isHost()) {
+      initBoardState({ startClock: shouldStartClock() });
+      renderBoard();
+      setMessage("Restarted at guest request.");
+      syncState("restart");
+    }
+    return;
+  }
+}
+
+function applyRemoteState(payload) {
+  if (!payload) return;
+  stopTimer();
+
+  if (Array.isArray(payload.board)) {
+    board = payload.board.map(row => row.map(cell => ({ ...cell })));
+  }
+
+  currentPlayer = payload.currentPlayer || "white";
+  timerSeconds = typeof payload.timerSeconds === "number" ? payload.timerSeconds : timerSeconds;
+  gameOver = !!payload.gameOver;
+  lastAction = payload.lastAction || null;
+  selectedCell = null;
+  possibleMoves = [];
+
+  updateTimerDisplay();
+
+  if (payload.overlayVisible && payload.winnerText) {
+    showWinnerOverlay(payload.winnerText);
+  } else {
+    hideWinnerOverlay();
+  }
+
+  if (payload.message !== undefined) {
+    setMessage(payload.message || "");
+  }
+
+  renderBoard(true);
+}
+
+function handleRemoteMove(data) {
+  if (!data || !data.from || !data.to) return;
+  if (gameOver) {
+    sendStatus("Game is over.");
+    return;
+  }
+  if (currentPlayer !== ONLINE_COLORS.guest) {
+    sendStatus("Not your turn.");
+    return;
+  }
+
+  const { from, to } = data;
+  const fr = +from.row;
+  const fc = +from.col;
+  const tr = +to.row;
+  const tc = +to.col;
+
+  selectedCell = { row: fr, col: fc };
+  possibleMoves = computePossibleMoves(fr, fc);
+
+  if (tryMove(fr, fc, tr, tc)) {
+    selectedCell = null;
+    possibleMoves = [];
+    renderBoard(true);
+    checkWinCondition();
+    if (!gameOver) switchPlayer();
+    syncState("remote-move");
+  } else {
+    selectedCell = null;
+    possibleMoves = [];
+    renderBoard();
+    sendStatus("Illegal move.");
+  }
+}
+
+function sendStatus(text) {
+  if (!isHost() || !isConnected()) return;
+  sendToPeer({ type: "status", text });
 }
 
 // === INIT BOARD ===
 function initBoardState() {
+  const opts = arguments[0] || {};
+  const startClock = opts.startClock !== false;
+
   board = Array.from({ length: 8 }, () =>
     Array.from({ length: 8 }, () => ({ player: null, value: null, type: null }))
   );
@@ -168,12 +522,19 @@ function initBoardState() {
   if (tgtEl) tgtEl.textContent = TARGET_TILE;
 
   hideWinnerOverlay();
-  startTimer();
+  if (startClock) {
+    startTimer();
+  } else {
+    stopTimer();
+    timerSeconds = GAME_TIME_SECONDS;
+    updateTimerDisplay();
+  }
 }
 
 // === MESSAGE & WIN OVERLAY ===
 function setMessage(msg) {
   const el = document.getElementById("message");
+  lastMessage = msg;
   if (el) el.textContent = msg;
 }
 
@@ -182,12 +543,14 @@ function showWinnerOverlay(text) {
   const label = document.getElementById("winner-text");
   if (!overlay || !label) return;
   label.textContent = text;
+  winnerText = text;
   overlay.classList.add("visible");
 }
 
 function hideWinnerOverlay() {
   const overlay = document.getElementById("winner-overlay");
   if (!overlay) return;
+  winnerText = "";
   overlay.classList.remove("visible");
 }
 
@@ -267,12 +630,14 @@ function renderBoard(animate = false) {
 
 function updateBoardOrientation(boardEl = document.getElementById("board")) {
   if (!boardEl) return;
-  boardEl.classList.toggle("flipped", currentPlayer === "black");
+  const perspective = isOnline() ? myColor || "white" : "white";
+  boardEl.classList.toggle("flipped", perspective === "black");
 }
 
 // === CLICK HANDLING ===
 function onCellClick(e) {
   if (gameOver) return;
+  if (isOnline() && currentPlayer !== myColor) return;
 
   const row = +e.currentTarget.dataset.row;
   const col = +e.currentTarget.dataset.col;
@@ -296,12 +661,21 @@ function onCellClick(e) {
 
   const { row: fr, col: fc } = selectedCell;
 
+  if (shouldSendOnlineMove()) {
+    sendMoveAttempt(fr, fc, row, col);
+    selectedCell = null;
+    possibleMoves = [];
+    renderBoard();
+    return;
+  }
+
   if (tryMove(fr, fc, row, col)) {
     selectedCell = null;
     possibleMoves = [];
     renderBoard(true);
     checkWinCondition();
     if (!gameOver) switchPlayer();
+    syncState("move");
   } else {
     if (piece.player === currentPlayer) {
       selectedCell = { row, col };
@@ -309,6 +683,20 @@ function onCellClick(e) {
       renderBoard();
     }
   }
+}
+
+function shouldSendOnlineMove() {
+  return isConnected() && isGuest();
+}
+
+function sendMoveAttempt(fr, fc, tr, tc) {
+  if (!shouldSendOnlineMove()) return;
+  if (!net.conn || !net.conn.open) {
+    setMessage("Not connected to host.");
+    return;
+  }
+  sendToPeer({ type: "move", from: { row: fr, col: fc }, to: { row: tr, col: tc } });
+  setMessage("Move sent to host...");
 }
 
 function switchPlayer() {
@@ -525,6 +913,7 @@ function checkWinCondition() {
         showWinnerOverlay(`${winner} WINS !!`);
         gameOver = true;
         stopTimer();
+        syncState("target");
         return;
       }
     }
@@ -548,6 +937,7 @@ function checkWinCondition() {
     showWinnerOverlay(`${winner} WINS !!`);
     gameOver = true;
     stopTimer();
+    syncState("capture-all");
     return;
   }
 
@@ -563,11 +953,12 @@ function checkWinCondition() {
       setMessage(`BLACK wins by score (${black} vs ${white}) – ${opponent} has no moves.`);
       showWinnerOverlay(`BLACK WINS !!`);
     } else {
-      setMessage(`DRAW by score (${white} vs ${black}) – no moves left.`);
+      setMessage(`DRAW by score (${white} vs ${black}) - no moves left.`);
       showWinnerOverlay(`DRAW !!`);
     }
     gameOver = true;
     stopTimer();
+    syncState("stalemate");
     return;
   }
 }

@@ -39,6 +39,18 @@
       </div>
     </div>
 
+    <!-- ONLINE CONTROLS -->
+    <div class="online-panel">
+      <div class="online-actions">
+        <button id="host-online-btn" class="btn">Host online game</button>
+        <button id="copy-link-btn" class="btn secondary" disabled>Copy invite link</button>
+      </div>
+      <div class="online-info">
+        <span id="online-status">Offline hot seat</span>
+        <input id="invite-url" class="invite-url" readonly placeholder="Invite link will appear here" />
+      </div>
+    </div>
+
     <!-- BOARD + WIN OVERLAY -->
     <div class="board-wrapper">
       <div id="board" class="board"></div>
@@ -59,6 +71,7 @@
 
   </div>
 
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
