@@ -30,11 +30,9 @@ let lastAction = null;
 let moveSound = null;
 let mergeSound = null;
 
-// multiplayer
 let roomId = null;
 let localPlayer = null; // "white" | "black" | "spectator"
 
-// screens
 let gameScreenVisible = false;
 
 /**********************
@@ -53,7 +51,6 @@ window.addEventListener("load", () => {
   const copyBtn = document.getElementById("copy-link-btn");
   if (copyBtn) copyBtn.addEventListener("click", copyRoomLink);
 
-  // detect room from URL
   const urlParams = new URLSearchParams(window.location.search);
   const urlRoom = urlParams.get("room");
 
@@ -63,7 +60,6 @@ window.addEventListener("load", () => {
     setLobbyStatus(`Joining room ${roomId}…`);
     joinRoom(roomId);
   } else {
-    // no room: just show lobby, local-only mode if you start
     showLobbyScreen();
     initBoardState();
     updateLocalPlayerLabel();
@@ -134,39 +130,31 @@ function createRoomAndShare() {
   roomId = id;
   setRoomLabel(id);
 
-  // Set URL ?room=ID
   const url = new URL(window.location.href);
   url.searchParams.set("room", id);
   window.history.replaceState({}, "", url.toString());
 
-  // create initial board state
   initBoardState();
-  pushStateToFirebase(true, "Game created.");
+  pushStateToFirebase(true, "Game created. Waiting for opponent…");
 
-  // you are white by default
   localPlayer = "white";
   updateLocalPlayerLabel();
 
-  // 👉 REGISTER CREATOR AS WHITE IN DB
+  // register white player
   const roomRef = db.ref(`rooms/${id}`);
   const uid = `user_${Math.random().toString(36).slice(2, 8)}`;
   roomRef.child("players/white").set(uid);
 
-  // show room info block
   const roomInfo = document.getElementById("room-info");
   if (roomInfo) roomInfo.classList.remove("hidden");
-
   const linkInput = document.getElementById("room-link");
   if (linkInput) linkInput.value = url.toString();
 
-  setLobbyStatus(
-    "Room created. Send the link to your friend. Game starts when both players join."
-  );
+  setLobbyStatus("Room created. Send the link to your friend.");
 
-  // start listening for second player and board updates
   subscribeToRoom(id);
+  showGameScreen(); // 👈 creator immediately sees the board
 
-  // try copy link automatically
   navigator.clipboard?.writeText(url.toString()).catch(() => {});
 }
 
@@ -177,11 +165,9 @@ function copyRoomLink() {
   linkInput.setSelectionRange(0, 99999);
   navigator.clipboard
     ?.writeText(linkInput.value)
-    .then(() =>
-      setLobbyStatus("Link copied! Send it to your friend.")
-    )
+    .then(() => setLobbyStatus("Link copied! Send it to your friend."))
     .catch(() =>
-      setLobbyStatus("Copy failed, please copy link manually.")
+      setLobbyStatus("Copy failed, please copy the link manually.")
     );
 }
 
@@ -191,19 +177,17 @@ function joinRoom(id) {
     const data = snapshot.val();
 
     if (!data) {
-      // room does not exist yet → create and be white
+      // room not created yet → create it and be white
       roomId = id;
       initBoardState();
-      pushStateToFirebase(true, "Room created.");
+      pushStateToFirebase(true, "Game created. Waiting for opponent…");
       localPlayer = "white";
       setLobbyStatus(
-        `Room ${id} created. You are White. Waiting for second player…`
+        `Room ${id} created. You are White. Waiting for opponent…`
       );
-
       const uid = `user_${Math.random().toString(36).slice(2, 8)}`;
       roomRef.child("players/white").set(uid);
     } else {
-      // room exists: check sides
       const hasWhite = !!data.players?.white;
       const hasBlack = !!data.players?.black;
       if (!hasWhite) {
@@ -214,7 +198,6 @@ function joinRoom(id) {
         localPlayer = "spectator";
       }
 
-      // load game state from DB
       if (data.board && data.currentPlayer) {
         board = data.board;
         currentPlayer = data.currentPlayer;
@@ -225,12 +208,9 @@ function joinRoom(id) {
       if (localPlayer === "spectator") {
         setLobbyStatus(`Room ${id} is full. You are a spectator.`);
       } else {
-        setLobbyStatus(
-          `Joined room ${id} as ${localPlayer}. Waiting for both players…`
-        );
+        setLobbyStatus(`Joined room ${id} as ${localPlayer}.`);
       }
 
-      // register player in DB if not spectator
       const playerField =
         localPlayer === "white"
           ? "players/white"
@@ -246,6 +226,7 @@ function joinRoom(id) {
 
     updateLocalPlayerLabel();
     subscribeToRoom(id);
+    showGameScreen(); // 👈 joiner also sees the board immediately
   });
 }
 
@@ -263,32 +244,8 @@ function subscribeToRoom(id) {
 
     if (data.message) setMessage(data.message);
 
-    const hasWhite = !!data.players?.white;
-    const hasBlack = !!data.players?.black;
-
-    if (hasWhite && hasBlack) {
-      // both players ready → show board
-      if (!gameScreenVisible) {
-        showGameScreen();
-        setMessage("");
-      } else {
-        renderBoard();
-      }
-    } else {
-      // still in lobby
-      if (!gameScreenVisible) {
-        if (localPlayer === "white") {
-          setLobbyStatus(
-            `Room ${id}. Waiting for second player to join…`
-          );
-        } else if (localPlayer === "black") {
-          setLobbyStatus(
-            `Joined room ${id} as Black. Waiting for White…`
-          );
-        } else {
-          setLobbyStatus(`Watching room ${id}…`);
-        }
-      }
+    if (gameScreenVisible) {
+      renderBoard();
     }
   });
 }
@@ -339,7 +296,7 @@ function initBoardState() {
     board[row][col] = { player, value, type: getTypeForValue(value) };
   }
 
-  // Black side at top
+  // Black at top
   for (let c = 0; c < 8; c++) place(1, c, "black", 2);
   place(0, 0, "black", 16);
   place(0, 7, "black", 16);
@@ -350,7 +307,7 @@ function initBoardState() {
   place(0, 3, "black", 32);
   place(0, 4, "black", 32);
 
-  // White side at bottom
+  // White at bottom
   for (let c = 0; c < 8; c++) place(6, c, "white", 2);
   place(7, 0, "white", 16);
   place(7, 7, "white", 16);
@@ -395,7 +352,7 @@ function renderBoard(animate = false) {
 
       const piece = board[r][c];
 
-      if (piece.player) {
+      if (piece && piece.player) {
         const v = piece.value;
         cell.textContent = v;
         cell.classList.add(v >= 2048 ? "tile-super" : `tile-${v}`);
@@ -466,13 +423,11 @@ function updateScores() {
 function onCellClick(e) {
   if (gameOver) return;
 
-  // spectator cannot move
   if (localPlayer === "spectator" && roomId) {
     setMessage("You are a spectator in this room.");
     return;
   }
 
-  // only current side can move in online mode
   if (roomId && localPlayer && localPlayer !== currentPlayer) {
     setMessage("It is not your turn.");
     return;
@@ -540,7 +495,6 @@ function empty() {
   return { player: null, value: null, type: null };
 }
 
-// 2 -> pawn, 4 -> knight, 8 -> bishop, 16 -> rook, 32+ -> queen
 function getTypeForValue(value) {
   if (value <= 2) return "pawn";
   if (value <= 4) return "knight";
@@ -549,7 +503,6 @@ function getTypeForValue(value) {
   return "queen";
 }
 
-// returns: "move" | "merge" | "capture" | null
 function getMoveType(fr, fc, tr, tc) {
   if (fr === tr && fc === tc) return null;
 
@@ -645,7 +598,6 @@ function pawnMove(piece, fr, fc, tr, tc, isCapture) {
   const dc = tc - fc;
 
   if (isCapture) return dr === dir && Math.abs(dc) === 1;
-
   if (dc === 0 && dr === dir) return true;
 
   const startRow = piece.player === "white" ? 6 : 1;
@@ -739,7 +691,6 @@ function hasAnyLegalMove(player) {
 }
 
 function checkWinCondition() {
-  // 1) Target tile win
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = board[r][c];
@@ -756,17 +707,14 @@ function checkWinCondition() {
 
   const opponent = currentPlayer === "white" ? "black" : "white";
 
-  // 2) Opponent no pieces
-  let opponentHasPiece = false;
-  for (let r = 0; r < 8 && !opponentHasPiece; r++) {
-    for (let c = 0; c < 8 && !opponentHasPiece; c++) {
-      if (board[r][c].player === opponent) {
-        opponentHasPiece = true;
-      }
+  let oppHasPiece = false;
+  for (let r = 0; r < 8 && !oppHasPiece; r++) {
+    for (let c = 0; c < 8 && !oppHasPiece; c++) {
+      if (board[r][c].player === opponent) oppHasPiece = true;
     }
   }
 
-  if (!opponentHasPiece) {
+  if (!oppHasPiece) {
     const winner = currentPlayer.toUpperCase();
     const text = `${winner} wins (captured all pieces)!`;
     setMessage(text);
@@ -775,7 +723,6 @@ function checkWinCondition() {
     return text;
   }
 
-  // 3) Stalemate-like: opponent has pieces but no moves
   const opponentCanMove = hasAnyLegalMove(opponent);
 
   if (!opponentCanMove) {
