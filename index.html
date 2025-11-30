@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Chess 2048</title>
+  <title>Chess 2048 Online</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="game-container">
-    
     <!-- TOP BAR -->
     <div class="top">
       <div class="title">Chess 2048</div>
@@ -27,27 +26,19 @@
       </div>
     </div>
 
-    <!-- CURRENT PLAYER + TIMER + RESTART -->
+    <!-- CURRENT PLAYER + ROOM INFO + RESTART -->
     <div class="subheader">
-      <div>Current player: <span id="current-player">White</span></div>
+      <div>
+        Current player: <span id="current-player">White</span><br />
+        You are: <span id="local-player">Waiting…</span>
+      </div>
 
       <div class="subheader-right">
-        <div class="timer">
-          Time left: <span id="timer">05:00</span>
+        <div class="room-panel">
+          <div id="room-id-label" class="room-id-label">No room</div>
+          <button id="create-room-btn" class="btn small">Create game</button>
         </div>
         <button id="restart-btn" class="btn">Restart</button>
-      </div>
-    </div>
-
-    <!-- ONLINE CONTROLS -->
-    <div class="online-panel">
-      <div class="online-actions">
-        <button id="host-online-btn" class="btn">Host online game</button>
-        <button id="copy-link-btn" class="btn secondary" disabled>Copy invite link</button>
-      </div>
-      <div class="online-info">
-        <span id="online-status">Offline hot seat</span>
-        <input id="invite-url" class="invite-url" readonly placeholder="Invite link will appear here" />
       </div>
     </div>
 
@@ -55,7 +46,6 @@
     <div class="board-wrapper">
       <div id="board" class="board"></div>
 
-      <!-- OVERLAY -->
       <div id="winner-overlay" class="winner-overlay">
         <div class="winner-box">
           <div id="winner-text" class="winner-text">WHITE WINS !!</div>
@@ -65,13 +55,15 @@
 
     <div id="message" class="message"></div>
 
-    <!-- SOUNDS -->
+    <!-- SOUNDS (optional) -->
     <audio id="sound-move" src="move.wav" preload="auto"></audio>
     <audio id="sound-merge" src="merge.wav" preload="auto"></audio>
-
   </div>
 
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <!-- Firebase (compat version) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
   <script src="game.js"></script>
 </body>
 </html>
