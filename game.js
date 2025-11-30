@@ -1,11 +1,6 @@
 /**********************
  *  FIREBASE SETUP
  **********************/
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyArA9AlJWeMsAQyplXBCtShKEdsqRRXanU",
@@ -144,13 +139,18 @@ function createRoomAndShare() {
   url.searchParams.set("room", id);
   window.history.replaceState({}, "", url.toString());
 
-  // create initial state in DB
+  // create initial board state
   initBoardState();
   pushStateToFirebase(true, "Game created.");
 
   // you are white by default
   localPlayer = "white";
   updateLocalPlayerLabel();
+
+  // 👉 REGISTER CREATOR AS WHITE IN DB
+  const roomRef = db.ref(`rooms/${id}`);
+  const uid = `user_${Math.random().toString(36).slice(2, 8)}`;
+  roomRef.child("players/white").set(uid);
 
   // show room info block
   const roomInfo = document.getElementById("room-info");
@@ -159,9 +159,11 @@ function createRoomAndShare() {
   const linkInput = document.getElementById("room-link");
   if (linkInput) linkInput.value = url.toString();
 
-  setLobbyStatus("Room created. Send the link to your friend. Game starts when both players join.");
+  setLobbyStatus(
+    "Room created. Send the link to your friend. Game starts when both players join."
+  );
 
-  // start listening
+  // start listening for second player and board updates
   subscribeToRoom(id);
 
   // try copy link automatically
@@ -173,14 +175,19 @@ function copyRoomLink() {
   if (!linkInput) return;
   linkInput.select();
   linkInput.setSelectionRange(0, 99999);
-  navigator.clipboard?.writeText(linkInput.value)
-    .then(() => setLobbyStatus("Link copied! Send it to your friend."))
-    .catch(() => setLobbyStatus("Copy failed, please copy link manually."));
+  navigator.clipboard
+    ?.writeText(linkInput.value)
+    .then(() =>
+      setLobbyStatus("Link copied! Send it to your friend.")
+    )
+    .catch(() =>
+      setLobbyStatus("Copy failed, please copy link manually.")
+    );
 }
 
 function joinRoom(id) {
   const roomRef = db.ref(`rooms/${id}`);
-  roomRef.once("value").then(snapshot => {
+  roomRef.once("value").then((snapshot) => {
     const data = snapshot.val();
 
     if (!data) {
@@ -189,7 +196,12 @@ function joinRoom(id) {
       initBoardState();
       pushStateToFirebase(true, "Room created.");
       localPlayer = "white";
-      setLobbyStatus(`Room ${id} created. You are White. Waiting for second player…`);
+      setLobbyStatus(
+        `Room ${id} created. You are White. Waiting for second player…`
+      );
+
+      const uid = `user_${Math.random().toString(36).slice(2, 8)}`;
+      roomRef.child("players/white").set(uid);
     } else {
       // room exists: check sides
       const hasWhite = !!data.players?.white;
@@ -213,18 +225,23 @@ function joinRoom(id) {
       if (localPlayer === "spectator") {
         setLobbyStatus(`Room ${id} is full. You are a spectator.`);
       } else {
-        setLobbyStatus(`Joined room ${id} as ${localPlayer}. Waiting for both players…`);
+        setLobbyStatus(
+          `Joined room ${id} as ${localPlayer}. Waiting for both players…`
+        );
       }
-    }
 
-    // update players in DB
-    const playerField =
-      localPlayer === "white" ? "players/white" :
-      localPlayer === "black" ? "players/black" : null;
+      // register player in DB if not spectator
+      const playerField =
+        localPlayer === "white"
+          ? "players/white"
+          : localPlayer === "black"
+          ? "players/black"
+          : null;
 
-    if (playerField) {
-      const uid = `user_${Math.random().toString(36).slice(2, 8)}`;
-      roomRef.child(playerField).set(uid);
+      if (playerField) {
+        const uid = `user_${Math.random().toString(36).slice(2, 8)}`;
+        roomRef.child(playerField).set(uid);
+      }
     }
 
     updateLocalPlayerLabel();
@@ -234,7 +251,7 @@ function joinRoom(id) {
 
 function subscribeToRoom(id) {
   const roomRef = db.ref(`rooms/${id}`);
-  roomRef.on("value", snapshot => {
+  roomRef.on("value", (snapshot) => {
     const data = snapshot.val();
     if (!data) return;
     if (!data.board || !data.currentPlayer) return;
@@ -244,14 +261,13 @@ function subscribeToRoom(id) {
     gameOver = !!data.gameOver;
     lastAction = null;
 
-    // update message if exists
     if (data.message) setMessage(data.message);
 
-    // check if both players present -> show game screen
     const hasWhite = !!data.players?.white;
     const hasBlack = !!data.players?.black;
 
     if (hasWhite && hasBlack) {
+      // both players ready → show board
       if (!gameScreenVisible) {
         showGameScreen();
         setMessage("");
@@ -259,12 +275,16 @@ function subscribeToRoom(id) {
         renderBoard();
       }
     } else {
-      // still waiting in lobby
+      // still in lobby
       if (!gameScreenVisible) {
         if (localPlayer === "white") {
-          setLobbyStatus(`Room ${id}. Waiting for second player to join…`);
+          setLobbyStatus(
+            `Room ${id}. Waiting for second player to join…`
+          );
         } else if (localPlayer === "black") {
-          setLobbyStatus(`Joined room ${id} as Black. Waiting for White…`);
+          setLobbyStatus(
+            `Joined room ${id} as Black. Waiting for White…`
+          );
         } else {
           setLobbyStatus(`Watching room ${id}…`);
         }
@@ -287,11 +307,7 @@ function pushStateToFirebase(fullReset = false, customMessage = null) {
     payload.message = customMessage;
   }
 
-  if (fullReset) {
-    roomRef.update(payload);
-  } else {
-    roomRef.update(payload);
-  }
+  roomRef.update(payload);
 }
 
 /**********************
@@ -312,7 +328,11 @@ function playSound(audioEl) {
 
 function initBoardState() {
   board = Array.from({ length: 8 }, () =>
-    Array.from({ length: 8 }, () => ({ player: null, value: null, type: null }))
+    Array.from({ length: 8 }, () => ({
+      player: null,
+      value: null,
+      type: null,
+    }))
   );
 
   function place(row, col, player, value) {
@@ -364,7 +384,7 @@ function renderBoard(animate = false) {
   boardEl.innerHTML = "";
 
   updateScores();
-  const moveSet = new Set(possibleMoves.map(m => `${m.row},${m.col}`));
+  const moveSet = new Set(possibleMoves.map((m) => `${m.row},${m.col}`));
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -393,7 +413,9 @@ function renderBoard(animate = false) {
       }
 
       if (animate && lastAction) {
-        const hit = lastAction.cells.some(p => p.row === r && p.col === c);
+        const hit = lastAction.cells.some(
+          (p) => p.row === r && p.col === c
+        );
         if (hit) {
           cell.classList.add(
             lastAction.type === "move" ? "tile-new" : "tile-merged"
@@ -417,7 +439,8 @@ function renderBoard(animate = false) {
  *  SCORES
  **********************/
 function computeScores() {
-  let white = 0, black = 0;
+  let white = 0,
+    black = 0;
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = board[r][c];
@@ -611,11 +634,7 @@ function isLegalMovement(piece, fr, fc, tr, tc, isCapture) {
     case "rook":
       return dr === 0 || dc === 0;
     case "queen":
-      return (
-        dr === 0 ||
-        dc === 0 ||
-        Math.abs(dr) === Math.abs(dc)
-      );
+      return dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc);
   }
   return false;
 }
@@ -636,7 +655,8 @@ function pawnMove(piece, fr, fc, tr, tc, isCapture) {
     dr === 2 * dir &&
     !board[fr + dir][fc].player &&
     !board[tr][tc].player
-  ) return true;
+  )
+    return true;
 
   return false;
 }
@@ -675,7 +695,7 @@ function maybePromotePawn(r, c) {
   board[r][c] = {
     player: p.player,
     value,
-    type: getTypeForValue(value)
+    type: getTypeForValue(value),
   };
   setMessage(`${p.player} pawn promoted to 32!`);
 }
