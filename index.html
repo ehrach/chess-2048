@@ -54,7 +54,7 @@
         </div>
       </div>
 
-      <!-- CURRENT PLAYER + INFO + RESTART -->
+      <!-- CURRENT PLAYER + RESTART -->
       <div class="subheader">
         <div>
           Current player: <span id="current-player">White</span><br />
@@ -79,16 +79,19 @@
 
       <div id="message" class="message"></div>
 
-      <!-- SOUNDS (optional) -->
+      <!-- SOUNDS -->
       <audio id="sound-move" src="move.wav" preload="auto"></audio>
       <audio id="sound-merge" src="merge.wav" preload="auto"></audio>
     </div>
   </div>
 
-  <!-- Firebase (compat version) -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
+  <!-- Your local (ignored) config with real keys -->
+  <script src="config.js"></script>
+  <!-- Game logic (no secrets inside) -->
   <script src="game.js"></script>
 </body>
 </html>

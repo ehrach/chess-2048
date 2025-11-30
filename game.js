@@ -1,18 +1,21 @@
 /**********************
  *  FIREBASE SETUP
  **********************/
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyArA9AlJWeMsAQyplXBCtShKEdsqRRXanU",
-  authDomain: "chess-2048.firebaseapp.com",
-  databaseURL: "https://chess-2048-default-rtdb.firebaseio.com",
-  projectId: "chess-2048",
-  storageBucket: "chess-2048.firebasestorage.app",
-  messagingSenderId: "690514379000",
-  appId: "1:690514379000:web:4a0c90aa6c31f5f7fafb0d"
-};
+/*
+  IMPORTANT:
+  - firebaseConfig and firebase.initializeApp(firebaseConfig)
+    must be defined in config.js, which is loaded BEFORE this file.
+  - Example config.js:
 
-firebase.initializeApp(firebaseConfig);
+      const firebaseConfig = { ...real keys here... };
+      firebase.initializeApp(firebaseConfig);
+*/
+
+if (!firebase.apps || !firebase.apps.length) {
+  console.error(
+    "Firebase app not initialized. Make sure config.js is loaded before game.js."
+  );
+}
 const db = firebase.database();
 
 /**********************
@@ -153,7 +156,7 @@ function createRoomAndShare() {
   setLobbyStatus("Room created. Send the link to your friend.");
 
   subscribeToRoom(id);
-  showGameScreen(); // 👈 creator immediately sees the board
+  showGameScreen(); // creator immediately sees board
 
   navigator.clipboard?.writeText(url.toString()).catch(() => {});
 }
@@ -226,7 +229,7 @@ function joinRoom(id) {
 
     updateLocalPlayerLabel();
     subscribeToRoom(id);
-    showGameScreen(); // 👈 joiner also sees the board immediately
+    showGameScreen(); // joiner also sees board
   });
 }
 
@@ -632,7 +635,6 @@ function isPathClear(piece, fr, fc, tr, tc) {
   return true;
 }
 
-// promotion: 2 → 32 on last rank
 function maybePromotePawn(r, c) {
   const p = board[r][c];
   if (p.type !== "pawn") return;

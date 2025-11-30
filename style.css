@@ -6,7 +6,8 @@
 }
 
 body {
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   background: #f3f3f3;
   color: #222;
   display: flex;
@@ -16,7 +17,6 @@ body {
   margin: 0;
 }
 
-/* Screens */
 .screen {
   width: 640px;
   max-width: 100%;
@@ -37,7 +37,7 @@ body {
   background: #ffffff;
   padding: 28px 24px;
   border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
 }
 
 .lobby-title {
@@ -152,7 +152,7 @@ body {
   gap: 12px;
 }
 
-/* BUTTONS */
+/* ===== BUTTONS ===== */
 .btn {
   border: none;
   border-radius: 6px;
@@ -193,8 +193,8 @@ body {
   grid-template-rows: repeat(8, 1fr);
   gap: 6px;
   width: 100%;
-  aspect-ratio: 1 / 1; /* square */
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  aspect-ratio: 1 / 1;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
 /* ===== CELLS ===== */
@@ -210,6 +210,8 @@ body {
   font-weight: 700;
   position: relative;
   cursor: pointer;
+
+  /* small shadow */
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
 
   transition:
@@ -220,7 +222,7 @@ body {
 }
 
 /* ===== MONOCHROME PLAYER COLORS ===== */
-/* White pieces */
+/* White cards */
 .piece-white.tile-2 { background: #ffffff; color: #000; }
 .piece-white.tile-4 { background: #f2f2f2; color: #000; }
 .piece-white.tile-8 { background: #e6e6e6; color: #000; }
@@ -237,7 +239,7 @@ body {
   color: #000;
 }
 
-/* Black pieces */
+/* Black cards */
 .piece-black.tile-2 { background: #000000; color: #fff; }
 .piece-black.tile-4 { background: #0d0d0d; color: #fff; }
 .piece-black.tile-8 { background: #1a1a1a; color: #fff; }
@@ -254,7 +256,7 @@ body {
   color: #fff;
 }
 
-/* ===== SELECTION + MOVE DOTS ===== */
+/* ===== SELECTION + DOTS ===== */
 .cell.selected {
   box-shadow:
     0 0 0 3px rgba(255, 140, 0, 0.75) inset,
