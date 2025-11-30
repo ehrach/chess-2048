@@ -6,58 +6,83 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="game-container">
-    <!-- TOP BAR -->
-    <div class="top">
-      <div class="title">Chess 2048</div>
-      <div class="scores">
-        <div class="score-box">
-          <div class="score-label">White</div>
-          <div id="score-white" class="score-value">136</div>
-        </div>
-        <div class="score-box">
-          <div class="score-label">Black</div>
-          <div id="score-black" class="score-value">136</div>
-        </div>
-        <div class="score-box target-box">
-          <div class="score-label">Target</div>
-          <div id="target-tile" class="score-value">512</div>
-        </div>
-      </div>
-    </div>
+  <!-- LOBBY SCREEN -->
+  <div id="lobby-screen" class="screen lobby-screen">
+    <div class="lobby-container">
+      <h1 class="lobby-title">Chess 2048 Online</h1>
+      <p id="lobby-status" class="lobby-status">
+        Create a game and send the link to your friend.
+      </p>
 
-    <!-- CURRENT PLAYER + ROOM INFO + RESTART -->
-    <div class="subheader">
-      <div>
-        Current player: <span id="current-player">White</span><br />
-        You are: <span id="local-player">Waiting…</span>
-      </div>
+      <button id="create-room-btn" class="btn lobby-btn">
+        Create game
+      </button>
 
-      <div class="subheader-right">
-        <div class="room-panel">
-          <div id="room-id-label" class="room-id-label">No room</div>
-          <button id="create-room-btn" class="btn small">Create game</button>
+      <div id="room-info" class="room-info hidden">
+        <div class="room-id-row">
+          Room ID: <span id="room-id-label"></span>
         </div>
-        <button id="restart-btn" class="btn">Restart</button>
-      </div>
-    </div>
 
-    <!-- BOARD + WIN OVERLAY -->
-    <div class="board-wrapper">
-      <div id="board" class="board"></div>
-
-      <div id="winner-overlay" class="winner-overlay">
-        <div class="winner-box">
-          <div id="winner-text" class="winner-text">WHITE WINS !!</div>
+        <label class="room-link-label">Game link:</label>
+        <div class="room-link-row">
+          <input id="room-link" class="room-link-input" readonly />
+          <button id="copy-link-btn" class="btn small">Copy link</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <div id="message" class="message"></div>
+  <!-- GAME SCREEN -->
+  <div id="game-screen" class="screen hidden">
+    <div class="game-container">
+      <!-- TOP BAR -->
+      <div class="top">
+        <div class="title">Chess 2048</div>
+        <div class="scores">
+          <div class="score-box">
+            <div class="score-label">White</div>
+            <div id="score-white" class="score-value">136</div>
+          </div>
+          <div class="score-box">
+            <div class="score-label">Black</div>
+            <div id="score-black" class="score-value">136</div>
+          </div>
+          <div class="score-box target-box">
+            <div class="score-label">Target</div>
+            <div id="target-tile" class="score-value">512</div>
+          </div>
+        </div>
+      </div>
 
-    <!-- SOUNDS (optional) -->
-    <audio id="sound-move" src="move.wav" preload="auto"></audio>
-    <audio id="sound-merge" src="merge.wav" preload="auto"></audio>
+      <!-- CURRENT PLAYER + INFO + RESTART -->
+      <div class="subheader">
+        <div>
+          Current player: <span id="current-player">White</span><br />
+          You are: <span id="local-player">Waiting…</span>
+        </div>
+
+        <div class="subheader-right">
+          <button id="restart-btn" class="btn">Restart</button>
+        </div>
+      </div>
+
+      <!-- BOARD + WIN OVERLAY -->
+      <div class="board-wrapper">
+        <div id="board" class="board"></div>
+
+        <div id="winner-overlay" class="winner-overlay">
+          <div class="winner-box">
+            <div id="winner-text" class="winner-text">WHITE WINS !!</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="message" class="message"></div>
+
+      <!-- SOUNDS (optional) -->
+      <audio id="sound-move" src="move.wav" preload="auto"></audio>
+      <audio id="sound-merge" src="merge.wav" preload="auto"></audio>
+    </div>
   </div>
 
   <!-- Firebase (compat version) -->

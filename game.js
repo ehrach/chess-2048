@@ -17,8 +17,8 @@ const firebaseConfig = {
   appId: "1:690514379000:web:4a0c90aa6c31f5f7fafb0d"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
 /**********************
  *  GAME STATE
@@ -39,6 +39,9 @@ let mergeSound = null;
 let roomId = null;
 let localPlayer = null; // "white" | "black" | "spectator"
 
+// screens
+let gameScreenVisible = false;
+
 /**********************
  *  INIT
  **********************/
@@ -52,6 +55,9 @@ window.addEventListener("load", () => {
   const createBtn = document.getElementById("create-room-btn");
   if (createBtn) createBtn.addEventListener("click", createRoomAndShare);
 
+  const copyBtn = document.getElementById("copy-link-btn");
+  if (copyBtn) copyBtn.addEventListener("click", copyRoomLink);
+
   // detect room from URL
   const urlParams = new URLSearchParams(window.location.search);
   const urlRoom = urlParams.get("room");
@@ -59,14 +65,40 @@ window.addEventListener("load", () => {
   if (urlRoom) {
     roomId = urlRoom;
     setRoomLabel(roomId);
+    setLobbyStatus(`Joining room ${roomId}…`);
     joinRoom(roomId);
   } else {
-    // no room: local mode only
+    // no room: just show lobby, local-only mode if you start
+    showLobbyScreen();
     initBoardState();
-    renderBoard();
     updateLocalPlayerLabel();
   }
 });
+
+/**********************
+ *  SCREEN HELPERS
+ **********************/
+function showLobbyScreen() {
+  const lobby = document.getElementById("lobby-screen");
+  const game = document.getElementById("game-screen");
+  if (lobby) lobby.classList.remove("hidden");
+  if (game) game.classList.add("hidden");
+  gameScreenVisible = false;
+}
+
+function showGameScreen() {
+  const lobby = document.getElementById("lobby-screen");
+  const game = document.getElementById("game-screen");
+  if (lobby) lobby.classList.add("hidden");
+  if (game) game.classList.remove("hidden");
+  gameScreenVisible = true;
+  renderBoard();
+}
+
+function setLobbyStatus(text) {
+  const el = document.getElementById("lobby-status");
+  if (el) el.textContent = text;
+}
 
 /**********************
  *  ROOM / MULTIPLAYER
@@ -82,7 +114,7 @@ function randomRoomId() {
 
 function setRoomLabel(id) {
   const label = document.getElementById("room-id-label");
-  if (label) label.textContent = id ? `Room: ${id}` : "No room";
+  if (label) label.textContent = id || "";
 }
 
 function updateLocalPlayerLabel() {
@@ -120,12 +152,30 @@ function createRoomAndShare() {
   localPlayer = "white";
   updateLocalPlayerLabel();
 
+  // show room info block
+  const roomInfo = document.getElementById("room-info");
+  if (roomInfo) roomInfo.classList.remove("hidden");
+
+  const linkInput = document.getElementById("room-link");
+  if (linkInput) linkInput.value = url.toString();
+
+  setLobbyStatus("Room created. Send the link to your friend. Game starts when both players join.");
+
   // start listening
   subscribeToRoom(id);
 
-  // convenience: try to copy link
+  // try copy link automatically
   navigator.clipboard?.writeText(url.toString()).catch(() => {});
-  setMessage("Room created. Share the link with your friend.");
+}
+
+function copyRoomLink() {
+  const linkInput = document.getElementById("room-link");
+  if (!linkInput) return;
+  linkInput.select();
+  linkInput.setSelectionRange(0, 99999);
+  navigator.clipboard?.writeText(linkInput.value)
+    .then(() => setLobbyStatus("Link copied! Send it to your friend."))
+    .catch(() => setLobbyStatus("Copy failed, please copy link manually."));
 }
 
 function joinRoom(id) {
@@ -139,7 +189,7 @@ function joinRoom(id) {
       initBoardState();
       pushStateToFirebase(true, "Room created.");
       localPlayer = "white";
-      setMessage("Room created. You are White.");
+      setLobbyStatus(`Room ${id} created. You are White. Waiting for second player…`);
     } else {
       // room exists: check sides
       const hasWhite = !!data.players?.white;
@@ -158,8 +208,12 @@ function joinRoom(id) {
         currentPlayer = data.currentPlayer;
         gameOver = !!data.gameOver;
         lastAction = null;
-        renderBoard();
-        setMessage(data.message || "");
+      }
+
+      if (localPlayer === "spectator") {
+        setLobbyStatus(`Room ${id} is full. You are a spectator.`);
+      } else {
+        setLobbyStatus(`Joined room ${id} as ${localPlayer}. Waiting for both players…`);
       }
     }
 
@@ -189,8 +243,33 @@ function subscribeToRoom(id) {
     currentPlayer = data.currentPlayer;
     gameOver = !!data.gameOver;
     lastAction = null;
-    renderBoard();
+
+    // update message if exists
     if (data.message) setMessage(data.message);
+
+    // check if both players present -> show game screen
+    const hasWhite = !!data.players?.white;
+    const hasBlack = !!data.players?.black;
+
+    if (hasWhite && hasBlack) {
+      if (!gameScreenVisible) {
+        showGameScreen();
+        setMessage("");
+      } else {
+        renderBoard();
+      }
+    } else {
+      // still waiting in lobby
+      if (!gameScreenVisible) {
+        if (localPlayer === "white") {
+          setLobbyStatus(`Room ${id}. Waiting for second player to join…`);
+        } else if (localPlayer === "black") {
+          setLobbyStatus(`Joined room ${id} as Black. Waiting for White…`);
+        } else {
+          setLobbyStatus(`Watching room ${id}…`);
+        }
+      }
+    }
   });
 }
 
@@ -365,13 +444,13 @@ function onCellClick(e) {
   if (gameOver) return;
 
   // spectator cannot move
-  if (localPlayer === "spectator") {
+  if (localPlayer === "spectator" && roomId) {
     setMessage("You are a spectator in this room.");
     return;
   }
 
-  // only current side can move
-  if (localPlayer && localPlayer !== currentPlayer && roomId) {
+  // only current side can move in online mode
+  if (roomId && localPlayer && localPlayer !== currentPlayer) {
     setMessage("It is not your turn.");
     return;
   }
